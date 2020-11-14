@@ -11,8 +11,9 @@ left  = 0.9*in(:,1);    % reduce volume to give extra headroom
 right = 0.9*in(:,2);
 
 % calculate number of frames needed for given size
-L = 4096                         % number of samples per frame
-numFrames = ceil(length/(L/2))-1 % number of frames (with 50% overlap)
+L = 2048                            % number of samples per frame
+T_L = L/44.1                        % frame length (mS)
+numFrames = ceil(length/(L/2))-1    % number of frames (with 50% overlap)
 
 % pad audio tracks with zeros to make length multiple of L/2
 paddedLength = (numFrames+1)*(L/2)
@@ -52,7 +53,7 @@ convFT = (0.5*leftSTFT).*(0.5*rightSTFT);
 % algorithm idea - for each coeffecient, keep in output if phase is roughly
 % the same between left and right channels
 
-sigma = 0.3  % std dev of gaussian gain vs. phase function
+sigma = 0.5  % std dev of gaussian gain vs. phase function
 
 % matrix of phase difference between each STFT coeffecient
 phaseDiffs = angle(leftSTFT) - angle(rightSTFT);
@@ -60,9 +61,14 @@ phaseDiffs = angle(leftSTFT) - angle(rightSTFT);
 % use guassian function to determine gains for each coeffecient
 gains = exp(-phaseDiffs.^2/(2*sigma^2))/(sigma*sqrt(2*pi));
 
+% to smooth warbling we can blur gain coeffs across time
+sigmaSmooth = 2
+kernel = exp(-(-5:5).^2/(2*sigmaSmooth^2))/(sigmaSmooth*sqrt(2*pi));
+smoothGains = conv2(gains,kernel,'same');
+
 % copy across each component times respective gain multiplier
-leftPhaseFT  = gains.*leftSTFT;
-rightPhaseFT = gains.*rightSTFT;
+leftPhaseFT  = smoothGains.*leftSTFT;
+rightPhaseFT = smoothGains.*rightSTFT;
 
 % ----------------- end audio processing -----------------
 
