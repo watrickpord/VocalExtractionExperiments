@@ -30,6 +30,7 @@ xlabel('Std. Dev. of Phase Difference Gaussian')
 ylabel('Amplitude')
 grid on
 
+
 % fit resulting curve to normal distrobution
 initGuess = [1,1,1];    % initial guess for amplitude, std dev, and +c
 [fit, residual] = fminsearch(@(p) norm( p(1).*exp(-0.5.*((sigmas(:))./p(2)).^2) + p(3) -Integrals(:)), initGuess)
@@ -40,15 +41,25 @@ residual
 hold on
 plot(sigmas, fit(1).*exp(-0.5.*((sigmas(:))./fit(2)).^2) + fit(3));
 
-
 % logistic fit
 initGuess = [0.7,2,2,1.2722];    % initial guess for amplitude, exponent, x0, and +c
 [fit, residual,exitflag] = fminsearch(@(p) norm( p(1)./( 1 + exp(p(2)*(sigmas-p(3))) ) + p(4) -Integrals(:)), initGuess)
 fit
 residual
-exitflag
+%exitflag
 
 % plot logistic fit
 hold on
 plot(sigmas, fit(1)./(1 + exp(fit(2)*(sigmas-fit(3)))) + fit(4));
-%     ------> doesn't work for some reason
+%     ------> doesn't fit well
+
+
+% find sigma value for amplitude = sqrt(2)
+initGuess = 1.9
+[fit, residual, exitflag] = fminsearch(@(p) norm( -trapz(Integrand(p, phi), phi) -sqrt(2) ), initGuess);
+fit
+residual
+
+% plot 3dB point (ampl. = sqrt(2))
+hold on
+plot(fit, sqrt(2), 'x')
