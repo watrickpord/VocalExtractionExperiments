@@ -11,7 +11,7 @@ left  = 0.9*in(:,1);    % reduce volume to give extra headroom
 right = 0.9*in(:,2);
 
 % calculate number of frames needed for given size
-L = 2048                         % number of samples per frame
+L = 4096                         % number of samples per frame
 numFrames = ceil(length/(L/2))-1 % number of frames (with 50% overlap)
 
 % pad audio tracks with zeros to make length multiple of L/2
@@ -52,17 +52,17 @@ convFT = (0.5*leftSTFT).*(0.5*rightSTFT);
 % algorithm idea - for each coeffecient, keep in output if phase is roughly
 % the same between left and right channels
 
-k = 0.8  % phase difference cutoff in radians
+sigma = 0.3  % std dev of gaussian gain vs. phase function
 
 % matrix of phase difference between each STFT coeffecient
 phaseDiffs = angle(leftSTFT) - angle(rightSTFT);
 
-% binary array of which components to keep
-indicies = abs(phaseDiffs)<k;
+% use guassian function to determine gains for each coeffecient
+gains = exp(-phaseDiffs.^2/(2*sigma^2))/(sigma*sqrt(2*pi));
 
-% only copy across components with left to right phase diff less than k
-leftPhaseFT  = indicies.*leftSTFT;
-rightPhaseFT = indicies.*rightSTFT;
+% copy across each component times respective gain multiplier
+leftPhaseFT  = gains.*leftSTFT;
+rightPhaseFT = gains.*rightSTFT;
 
 % ----------------- end audio processing -----------------
 
