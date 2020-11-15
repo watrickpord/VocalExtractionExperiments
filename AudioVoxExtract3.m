@@ -1,8 +1,8 @@
 % attempt 3 to extract centre channel from stereo mix:
 % go frame by frame and use euclidian distance between left and right
 % coeffecients as a measure of their similarity, apply higher gain to more
-% similar coeffecients (i.e. as per attempt except using euclidean distance
-% between complex coeffecients rather than just phase difference)
+% similar coeffecients (i.e. as per first attempt except using euclidean
+% distance between complex coeffecients rather than just phase difference)
 
 clear
 
@@ -10,11 +10,12 @@ clear
 [in, Fs] = audioread('Yesterday.flac');
 length = size(in);
 length = length(1)
-left  = 0.5*in(:,1);    % reduce volume to give extra headroom
-right = 0.5*in(:,2);
+
+left  = 0.5*in(:, 1);    % reduced volume to give extra headroom
+right = 0.5*in(:, 2);
 
 % calculate number of frames needed for given size
-L = 2048                            % number of samples per frame
+L = 3000                            % number of samples per frame
 T_L = L/44.1                        % frame length (mS)
 numFrames = ceil(length/(L/2))-1    % number of frames (with 50% overlap)
 
@@ -107,7 +108,7 @@ sigmaFrames = sigmaMs/T_L;
 kernelLen = 50;
 
 % smooth gain matrix
-kernel = exp(-(-kernelLen:kernelLen).^2/(2*sigmaFrames^2))/(sigmaFrames*sqrt(2*pi));
+kernel = exp(-(-kernelLen/2:kernelLen/2).^2/(2*sigmaFrames^2))/(sigmaFrames*sqrt(2*pi));
 gainMatrix = conv2(gainMatrix,kernel,'same');
 
 % copy fourier coeffecients with gain multiplier
@@ -143,13 +144,19 @@ end
 mono = left + right;
 monoProc = leftProc + rightProc;
 
+% stereo processed
+stereoProc = [leftProc rightProc];
+
 % original players
 lp = audioplayer(left, Fs);
 rp = audioplayer(right, Fs);
 mp = audioplayer(mono, Fs);
+sp = audioplayer(in, Fs);
 
 % processed players
 lpp = audioplayer(leftProc, Fs);
 rpp = audioplayer(rightProc, Fs);
 mpp = audioplayer(monoProc, Fs);
+spp = audioplayer(stereoProc, Fs);
+
 
