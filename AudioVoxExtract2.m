@@ -1,7 +1,7 @@
 % attempt 2 to extract centre channel from stereo mix:
 % using correlations in phase over a number of STFT frames to determine
 % is a source is left, centre, or right panned
-while true
+
 clear
 
 % import audio file and split to L and R channels
@@ -12,7 +12,7 @@ left  = 0.6*in(:,1);    % reduce volume to give extra headroom
 right = 0.6*in(:,2);
 
 % calculate number of frames needed for given size
-L = 512                            % number of samples per frame
+L = 2048                            % number of samples per frame
 T_L = L/44.1                        % frame length (mS)
 numFrames = ceil(length/(L/2))-1    % number of frames (with 50% overlap)
 
@@ -55,7 +55,7 @@ rightPhaseMatrix = angle(rightFT);
 % phase matrix and make a r value matrix based on L-R correlation
 rMatrix = zeros(size(leftPhaseMatrix));
 
-sliceLen = 6
+sliceLen = 10
 currentFrame = sliceLen/2 + 1;
 
 while currentFrame+(sliceLen/2) <= numFrames
@@ -65,22 +65,27 @@ while currentFrame+(sliceLen/2) <= numFrames
     
     % calculate r values for each row in current column (i.e. frame)
     for rowIndex = 1:L
-        currentR = corrcoef(leftPhaseMatrix(rowIndex, sliceStart:sliceEnd), rightPhaseMatrix(rowIndex, sliceStart:sliceEnd));
-        rMatrix(rowIndex, currentFrame) = currentR(2);
+        %currentR = corrcoef(leftPhaseMatrix(rowIndex, sliceStart:sliceEnd), rightPhaseMatrix(rowIndex, sliceStart:sliceEnd));
+        leftSlice  = leftPhaseMatrix(rowIndex, sliceStart:sliceEnd);
+        rightSlice = rightPhaseMatrix(rowIndex, sliceStart:sliceEnd);
+        
+        currentR = dot(leftSlice, rightSlice)/(norm(leftSlice)*norm(rightSlice));
+        
+        rMatrix(rowIndex, currentFrame) = currentR;
     end
     
     % increment frame counter
     currentFrame = currentFrame + 1;
 end
 
-end
+imshow(rMatrix)
 
 % hard cutoff for r value - very digital and warbly
 %leftProcFT = leftFT.*(rMatrix>0.5);
 %rightProcFT = rightFT.*(rMatrix>0.5);
 
 % guassian cutoff as r falls away from 1
-sigma = 0.25
+sigma = 0.4
 gainFunction = @(r) exp(-(r-1)^2/(2*sigma^2))/(sqrt(2*pi)*sigma);
 gainMatrix = arrayfun(gainFunction, rMatrix);
 
