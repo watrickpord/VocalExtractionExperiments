@@ -66,22 +66,34 @@ normMatrix = normDiffs./normSums;
 
 % sigma as a function of frequency (1st order high pass)
 sigmaGain = 0.3             % sigma value for f > cutoffFreq
-cutoffFreq = 700           % corner freq of LPF
+cutoffFreq = 300           % corner freq of HPF
 
-% go row by row (i.e. by freq) of normMatrix and calculate gain
+
 gainMatrix = zeros(size(normMatrix));
-
 fftFreqs = fftshift(ceil(-L/2:L/2-1)/(1/Fs)/L); % frequency of nth fft bin
 
-for index = 2:L      % n.b. running though 1:L gives NaN for f=0
+% go row by row (i.e. by freq) of normMatrix and calculate gain
+% n.b. running though 1:L gives NaN for f=0
+for index = 2:L
     % calculate gain vs norm gaussian for the current freq
     currentFreq = abs(fftFreqs(index));
     
-    % calculate sigma for current freq
+    % old function to calculate sigma for current freq
+    while false
     if currentFreq >= cutoffFreq
         currentSigma = sigmaGain;
     else
         currentSigma = sigmaGain*currentFreq/cutoffFreq;
+    end
+    end
+    
+    % new function to calculate sigma for current freq
+    if currentFreq >= cutoffFreq
+        currentSigma = sigmaGain;
+    elseif currentFreq >= cutoffFreq/2
+        currentSigma = 2*sigmaGain*currentFreq/cutoffFreq;
+    else 
+        currentSigma = 0.00000000000001;  % using 0.0 gives NaNs
     end
     
     sigmaFun = @(norm) exp(-norm^2/(2*currentSigma^2))/(currentSigma*sqrt(2*pi));
