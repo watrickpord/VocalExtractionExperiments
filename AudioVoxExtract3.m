@@ -14,7 +14,7 @@ left  = 0.5*in(:,1);    % reduce volume to give extra headroom
 right = 0.5*in(:,2);
 
 % calculate number of frames needed for given size
-L = 4096                            % number of samples per frame
+L = 2048                            % number of samples per frame
 T_L = L/44.1                        % frame length (mS)
 numFrames = ceil(length/(L/2))-1    % number of frames (with 50% overlap)
 
@@ -58,14 +58,51 @@ normSums  = abs(sumMatrix);
 normMatrix = normDiffs./normSums;
 
 % get gain from gaussian function (mean = 0) applied to norms
-sigma = 0.25
-gainMatrix = exp(-normMatrix.^2/(2*sigma^2))/(sigma*sqrt(2*pi));
+%sigmaGain = 0.25
+%gainMatrix = exp(-normMatrix.^2/(2*sigmaGain^2))/(sigmaGain*sqrt(2*pi));
 
-% gain matrix smoothing
-sigmaMs = 150               % st. dev. of guassian kernel in mS
+% frequency dependent sigma - we want sigma to be higher in the range of
+% the vocals and close to zero elsewhere (i.e. at LF)
+
+% sigma as a function of frequency (1st order high pass)
+sigmaGain = 0.3             % sigma value for f > cutoffFreq
+cutoffFreq = 700           % corner freq of LPF
+
+% go row by row (i.e. by freq) of normMatrix and calculate gain
+gainMatrix = zeros(size(normMatrix));
+
+fftFreqs = fftshift(ceil(-L/2:L/2-1)/(1/Fs)/L); % frequency of nth fft bin
+
+for index = 2:L      % n.b. running though 1:L gives NaN for f=0
+    % calculate gain vs norm gaussian for the current freq
+    currentFreq = abs(fftFreqs(index));
+    
+    % calculate sigma for current freq
+    if currentFreq >= cutoffFreq
+        currentSigma = sigmaGain;
+    else
+        currentSigma = sigmaGain*currentFreq/cutoffFreq;
+    end
+    
+    sigmaFun = @(norm) exp(-norm^2/(2*currentSigma^2))/(currentSigma*sqrt(2*pi));
+    %sigmaFun = @(norm) exp(-norm^2/(2*sigmaGain^2))/(sigmaGain*sqrt(2*pi));             % test
+    
+    % apply gain vs norm function to norms
+    currentNormsRow = normMatrix(index, :);
+    currentGainsRow = arrayfun(sigmaFun, currentNormsRow);
+    %currentGainsRow = exp(-currentNormsRow.^2/(2*sigmaGain^2))/(sigmaGain*sqrt(2*pi));    % test
+    
+    % save results in gain matrix
+    gainMatrix(index, :) = currentGainsRow;
+end
+
+
+% gain matrix smoothing parameters
+sigmaMs = 75               % st. dev. of smoothing kernel in mS
 sigmaFrames = sigmaMs/T_L;
 kernelLen = 50;
 
+% smooth gain matrix
 kernel = exp(-(-kernelLen:kernelLen).^2/(2*sigmaFrames^2))/(sigmaFrames*sqrt(2*pi));
 gainMatrix = conv2(gainMatrix,kernel,'same');
 
@@ -73,16 +110,17 @@ gainMatrix = conv2(gainMatrix,kernel,'same');
 leftProcFT  = gainMatrix.*leftFT;
 rightProcFT = gainMatrix.*rightFT;
 
+% sanity check short circuit
+%leftProcFT  = leftFT;
+%rightProcFT = rightFT;
+
 % ----------------- end audio processing -----------------
 
 % inverse FT
 
 % empty arrays for output audio
-leftNew = zeros(paddedLength, 1);
-rightNew = zeros(paddedLength, 1);
-
-leftProcNew = zeros(paddedLength, 1);
-rightProcNew = zeros(paddedLength, 1);
+leftProc  = zeros(paddedLength, 1);
+rightProc = zeros(paddedLength, 1);
 
 for index = 1:numFrames
     % inverse ffts for indexed frame
@@ -93,20 +131,17 @@ for index = 1:numFrames
     leftProcFrame = ifft(leftProcFT(:, index));
     rightProcFrame = ifft(rightProcFT(:, index));
     
-    % add the frame audio to main part
+    % add the frame audio to main stream
     startSample = (index-1)*(L/2) + 1;
     endSample   = startSample + L - 1;
     
-    leftNew(startSample:endSample) = leftNew(startSample:endSample) + leftFrame;
-    rightNew(startSample:endSample) = rightNew(startSample:endSample) + rightFrame;
-
-    leftProcNew(startSample:endSample) = leftProcNew(startSample:endSample) + leftProcFrame;
-    rightProcNew(startSample:endSample) = rightProcNew(startSample:endSample) + rightProcFrame;
+    leftProc(startSample:endSample) = leftProc(startSample:endSample) + leftProcFrame;
+    rightProc(startSample:endSample) = rightProc(startSample:endSample) + rightProcFrame;
 end
 
 % sum left and right to mono
 mono = left + right;
-monoPhaseNew = leftProcNew + rightProcNew;
+monoProc = leftProc + rightProc;
 
 % original players
 lp = audioplayer(left, Fs);
@@ -114,7 +149,7 @@ rp = audioplayer(right, Fs);
 mp = audioplayer(mono, Fs);
 
 % processed players
-lpp = audioplayer(leftProcNew, Fs);
-rpp = audioplayer(rightProcNew, Fs);
-mpp = audioplayer(monoPhaseNew, Fs);
+lpp = audioplayer(leftProc, Fs);
+rpp = audioplayer(rightProc, Fs);
+mpp = audioplayer(monoProc, Fs);
 
