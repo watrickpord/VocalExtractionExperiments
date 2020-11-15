@@ -49,6 +49,7 @@ for index = 1:numFrames
 end
 
 % -------------- audio processing goes here --------------
+fftFreqs = fftshift(ceil(-L/2:L/2-1)/(1/Fs)/L); % frequency of nth fft bin
 
 % matrix of Euclidean distance between left and right coeffecients
 differenceMatrix = leftFT - rightFT;
@@ -57,52 +58,43 @@ normDiffs = abs(differenceMatrix);
 normSums  = abs(sumMatrix);
 normMatrix = normDiffs./normSums;
 
-% get gain from gaussian function (mean = 0) applied to norms
-%sigmaGain = 0.25
-%gainMatrix = exp(-normMatrix.^2/(2*sigmaGain^2))/(sigmaGain*sqrt(2*pi));
 
 % frequency dependent sigma - we want sigma to be higher in the range of
 % the vocals and close to zero elsewhere (i.e. at LF)
-
-% sigma as a function of frequency (1st order high pass)
 sigmaGain = 0.3             % sigma value for f > cutoffFreq
-cutoffFreq = 300           % corner freq of HPF
+cutoffFreq = 150            % corner freq of HPF
 
-
+% empty gain matrix
 gainMatrix = zeros(size(normMatrix));
-fftFreqs = fftshift(ceil(-L/2:L/2-1)/(1/Fs)/L); % frequency of nth fft bin
 
 % go row by row (i.e. by freq) of normMatrix and calculate gain
-% n.b. running though 1:L gives NaN for f=0
+% note we only need to process for indicies with a nonzero gain (i.e.
+% frequency above cutoff)
 for index = 2:L
     % calculate gain vs norm gaussian for the current freq
     currentFreq = abs(fftFreqs(index));
     
-    % old function to calculate sigma for current freq
-    while false
-    if currentFreq >= cutoffFreq
-        currentSigma = sigmaGain;
-    else
-        currentSigma = sigmaGain*currentFreq/cutoffFreq;
-    end
+    % if freq is below cutoff, leave its gain at zero
+    if currentFreq < cutoffFreq
+        continue   
     end
     
-    % new function to calculate sigma for current freq
+    % otherwise calculate sigma for current freq
     if currentFreq >= cutoffFreq
         currentSigma = sigmaGain;
     elseif currentFreq >= cutoffFreq/2
         currentSigma = 2*sigmaGain*currentFreq/cutoffFreq;
-    else 
+    else
+        "Shouldn't have got here"
         currentSigma = 0.00000000000001;  % using 0.0 gives NaNs
     end
     
+    % gain vs norm function (with freq dependent sigma)
     sigmaFun = @(norm) exp(-norm^2/(2*currentSigma^2))/(currentSigma*sqrt(2*pi));
-    %sigmaFun = @(norm) exp(-norm^2/(2*sigmaGain^2))/(sigmaGain*sqrt(2*pi));             % test
     
     % apply gain vs norm function to norms
     currentNormsRow = normMatrix(index, :);
     currentGainsRow = arrayfun(sigmaFun, currentNormsRow);
-    %currentGainsRow = exp(-currentNormsRow.^2/(2*sigmaGain^2))/(sigmaGain*sqrt(2*pi));    % test
     
     % save results in gain matrix
     gainMatrix(index, :) = currentGainsRow;
@@ -121,10 +113,6 @@ gainMatrix = conv2(gainMatrix,kernel,'same');
 % copy fourier coeffecients with gain multiplier
 leftProcFT  = gainMatrix.*leftFT;
 rightProcFT = gainMatrix.*rightFT;
-
-% sanity check short circuit
-%leftProcFT  = leftFT;
-%rightProcFT = rightFT;
 
 % ----------------- end audio processing -----------------
 
